@@ -1,4 +1,4 @@
 #pragma once
 #define SERJO_VERSION_MAJOR 1
-#define SERJO_VERSION_MINOR 3
-#define SERJO_VERSION_TEXT L"1.3"
+#define SERJO_VERSION_MINOR 4
+#define SERJO_VERSION_TEXT L"1.4"

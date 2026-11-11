@@ -111,3 +111,24 @@ Os novos perfis guardam a temperatura; perfis anteriores de sete valores são in
 Foram criados testes locais para leitura de perfis antigos e novos, limites e direção do ajuste. A execução e o aspecto no Windows 11 com BOE0697 e GSM5BFB ainda devem ser verificados. Persistem as limitações de gamma, HDR, brilho físico, saturação e nitidez descritas acima.
 
 Para testar: na versão 1.2, clicar em **Verificar atualização**, aceitar a 1.3 e, após reiniciar, selecionar um monitor, mover a temperatura para os dois lados e segurar **Comparar**. Salvar e reaplicar um perfil e conferir um perfil antigo. Repetir em cada tela e em SDR. Caso a verificação automática falhe, fechar pela bandeja e substituir o executável manualmente.
+
+---
+
+## Continuação — versão 1.4, 11/11/2026
+
+### Relato
+
+O usuário informou que, durante a calibração, a imagem pisca entre o estado anterior e os ajustes novos, sem segurar o botão Comparar. A tela afetada e a persistência do problema após soltar o controle ainda não foram informadas.
+
+### Investigação e alterações
+
+- Na leitura do código, o estado anterior só é enviado explicitamente ao pressionar Comparar. A causa exata do sintoma não foi confirmada no Windows. A API de gama também pode ser sobrescrita pelo sistema ou outros aplicativos.
+- Foi corrigido um caminho que poderia substituir a edição pelo perfil salvo após um evento de vídeo. Os valores em edição ficam associados ao identificador do monitor durante a execução e são preservados em reenumeração e retomada; o perfil salvo não toma precedência sobre um rascunho.
+- Escritas duplicadas dos mesmos valores são evitadas; a atualização ao vivo foi ajustada para agrupar movimentos em intervalos de 220 ms. O botão Aplicar e a retomada podem forçar a reaplicação. A comparação continua reservada ao botão segurado.
+- Um rascunho não salvo continua apenas em memória, não sobrevive ao encerramento. A compatibilidade com os perfis existentes permanece.
+
+### Validação pendente
+
+O código foi compilado no Mac e os testes do modelo de cor foram executados localmente. O sintoma, a resposta durante o arrasto, comparação, reconexão, suspensão, troca entre monitores e atualização automática **precisam de teste no Windows**. Sem observação do driver, não é possível garantir que o piscar foi eliminado: o ajuste por gamma continua sujeito às limitações da API de Windows, ao driver e a outros calibradores.
+
+Teste sugerido: atualizar para 1.4; selecionar cada tela; mover brilho, gama e temperatura lentamente; confirmar se há piscadas antes e depois de soltar; segurar e soltar Comparar; alterar, trocar de monitor e voltar; registrar em qual tela e controle persiste o comportamento. Se continuar, informar se ocorre também após parar o controle e se há outros softwares de calibração ativos.

@@ -16,3 +16,5 @@ A partir da versão 1.2, o aplicativo inclui **Verificar atualização**. A vers
 4. No Windows, clique em **Verificar atualização**. A primeira troca a partir da versão antiga sem atualizador precisa ser manual.
 
 O manifest e o binário são obtidos via HTTPS de caminhos fixos no repositório. O checksum identifica inconsistências e corrupção; não é uma assinatura digital. O executável não é assinado. A atualização requer permissão de escrita na pasta onde ele está instalado.
+
+A versão 1.4 preserva ajustes em andamento ao tratar mudanças de vídeo e reduz escritas repetidas. A correção do relato de piscadas ainda depende de teste no computador Windows.
