@@ -14,7 +14,7 @@ static constexpr unsigned VERSION_MAJOR=SERJO_VERSION_MAJOR, VERSION_MINOR=SERJO
 static constexpr UINT UPDATE_RESULT=WM_APP+10;
 struct UpdateResult {int kind=0; std::wstring message, staged, version, expectedHash;};
 static bool fetchUpdate(const wchar_t *path,std::vector<unsigned char> &out,size_t limit){
- HINTERNET session=WinHttpOpen(L"SerjoColors/1.2",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);if(!session)return false;
+ HINTERNET session=WinHttpOpen(L"SerjoColors/" SERJO_VERSION_TEXT,WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);if(!session)return false;
  WinHttpSetTimeouts(session,10000,10000,15000,15000);
  HINTERNET conn=WinHttpConnect(session,UPDATE_HOST,INTERNET_DEFAULT_HTTPS_PORT,0);
  HINTERNET req=conn?WinHttpOpenRequest(conn,L"GET",path,nullptr,WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE|WINHTTP_FLAG_REFRESH):nullptr;

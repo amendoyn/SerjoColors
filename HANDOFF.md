@@ -99,3 +99,15 @@ O usuário informou que o executável abriu no Windows. Os efeitos eram vistos a
 4. Salve e aplique perfis por monitor; valide seleção, restauração, início automático e reconexão.
 5. Clique em **Verificar atualização** e confirme que informa estar atualizado. Uma futura atualização exige publicar uma versão superior e testá-la efetivamente no Windows.
 6. Se algum ajuste não responder, registre em qual monitor ocorreu, qual controle e o resultado visual; não considerar a função validada apenas porque o aplicativo abriu.
+
+---
+
+## Continuação — versão 1.3, 11/11/2026
+
+Foi adicionado o controle **Temperatura da cor**, com posição neutra em zero: para a esquerda, aparência mais fria; para a direita, mais quente. O ajuste modifica os canais da imagem por software e é combinado com os controles RGB já existentes. É uma correção visual relativa à referência do monitor, não uma medição ou ajuste calibrado em kelvin.
+
+Os novos perfis guardam a temperatura; perfis anteriores de sete valores são interpretados com temperatura neutra, preservando os demais parâmetros. A aplicação na inicialização usa o mesmo formato. A seleção do perfil e a comparação continuam usando a mesma rampa de cor.
+
+Foram criados testes locais para leitura de perfis antigos e novos, limites e direção do ajuste. A execução e o aspecto no Windows 11 com BOE0697 e GSM5BFB ainda devem ser verificados. Persistem as limitações de gamma, HDR, brilho físico, saturação e nitidez descritas acima.
+
+Para testar: na versão 1.2, clicar em **Verificar atualização**, aceitar a 1.3 e, após reiniciar, selecionar um monitor, mover a temperatura para os dois lados e segurar **Comparar**. Salvar e reaplicar um perfil e conferir um perfil antigo. Repetir em cada tela e em SDR. Caso a verificação automática falhe, fechar pela bandeja e substituir o executável manualmente.

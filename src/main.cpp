@@ -11,10 +11,11 @@
 #include <cstdint>
 #include <cwchar>
 #include "updater.h"
+#include "color_model.h"
 
 struct Monitor { HMONITOR handle; std::wstring device, name, key; WORD original[3][256]; bool haveOriginal = false; };
 static std::vector<Monitor> monitors;
-static HWND mainWindow, monitorBox, profileBox, statusText, startupCheck, sliders[7], values[7], applyButton, saveButton;
+static HWND mainWindow, monitorBox, profileBox, statusText, startupCheck, sliders[CONTROL_COUNT], values[CONTROL_COUNT], applyButton, saveButton;
 static HFONT font, titleFont;
 static HBRUSH background;
 static std::wstring iniPath, dataDir;
@@ -26,8 +27,8 @@ static std::wstring comparisonKey;
 static bool updating = false;
 static NOTIFYICONDATAW tray{};
 static const UINT trayMessage = WM_APP + 1;
-static const wchar_t *labels[] = {L"Brilho da imagem",L"Contraste da imagem",L"Profundidade de preto",L"Gama",L"Vermelho",L"Verde",L"Azul"};
-static const int defaults[] = {100,100,0,100,100,100,100};
+static const wchar_t *labels[] = {L"Brilho da imagem",L"Contraste da imagem",L"Profundidade de preto",L"Gama",L"Vermelho",L"Verde",L"Azul",L"Temp.  frio ↔ quente"};
+static const int defaults[] = {100,100,0,100,100,100,100,TEMPERATURE_DEFAULT};
 enum { ID_MONITOR=101, ID_PROFILE, ID_NEW, ID_SAVE, ID_DELETE, ID_PREVIEW, ID_REVERT, ID_STARTUP, ID_REFRESH, ID_APPLY, ID_UPDATE, ID_SLIDER=200 };
 static HWND control(const wchar_t* cls,const wchar_t* txt,DWORD style,int x,int y,int w,int h,int id=0) {
  HWND c=CreateWindowExW(0,cls,txt,WS_CHILD|WS_VISIBLE|style,x,y,w,h,mainWindow,(HMENU)(INT_PTR)id,GetModuleHandleW(nullptr),nullptr); SendMessageW(c,WM_SETFONT,(WPARAM)font,TRUE); return c;
@@ -90,24 +91,25 @@ static LRESULT CALLBACK compareProc(HWND h,UINT msg,WPARAM wp,LPARAM lp,UINT_PTR
  if(msg==WM_CAPTURECHANGED||msg==WM_CANCELMODE){finishComparison();return 0;}
  return DefSubclassProc(h,msg,wp,lp);
 }
-static void updateValues(){for(int i=0;i<7;i++){int v=(int)SendMessageW(sliders[i],TBM_GETPOS,0,0);wchar_t b[24];swprintf(b,24,L"%d",v);SetWindowTextW(values[i],b);}}
-static void setValues(const int *a){updating=true;for(int i=0;i<7;i++)SendMessageW(sliders[i],TBM_SETPOS,TRUE,a[i]);updating=false;updateValues();}
+static void updateValues(){for(int i=0;i<CONTROL_COUNT;i++){int v=(int)SendMessageW(sliders[i],TBM_GETPOS,0,0);wchar_t b[24];if(i==7)swprintf(b,24,L"%+d",v-50);else swprintf(b,24,L"%d",v);SetWindowTextW(values[i],b);}}
+static void setValues(const int *a){updating=true;for(int i=0;i<CONTROL_COUNT;i++)SendMessageW(sliders[i],TBM_SETPOS,TRUE,a[i]);updating=false;updateValues();}
 static std::wstring profileName(){wchar_t b[128]{};GetWindowTextW(profileBox,b,128);return b;}
-static bool decode(const std::wstring &s,int *v){int a[7];if(swscanf(s.c_str(),L"%d,%d,%d,%d,%d,%d,%d",&a[0],&a[1],&a[2],&a[3],&a[4],&a[5],&a[6])!=7)return false;for(int i=0;i<7;i++){int lo=i==2?0:50,hi=i==2?30:150;if(a[i]<lo||a[i]>hi)return false;v[i]=a[i];}return true;}
-static std::wstring encode(){wchar_t b[128];swprintf(b,128,L"%ld,%ld,%ld,%ld,%ld,%ld,%ld",SendMessageW(sliders[0],TBM_GETPOS,0,0),SendMessageW(sliders[1],TBM_GETPOS,0,0),SendMessageW(sliders[2],TBM_GETPOS,0,0),SendMessageW(sliders[3],TBM_GETPOS,0,0),SendMessageW(sliders[4],TBM_GETPOS,0,0),SendMessageW(sliders[5],TBM_GETPOS,0,0),SendMessageW(sliders[6],TBM_GETPOS,0,0));return b;}
+static bool decode(const std::wstring &s,int *v){return decodeProfile(s,v);}
+static std::wstring encode(){std::wstring result;for(int i=0;i<CONTROL_COUNT;i++){if(i)result+=L",";result+=std::to_wstring(SendMessageW(sliders[i],TBM_GETPOS,0,0));}return result;}
+static bool savedValuesMatch(const std::wstring &profile){int v[CONTROL_COUNT];if(!decode(readIni(section(),profile),v))return false;for(int i=0;i<CONTROL_COUNT;i++)if(v[i]!=(int)SendMessageW(sliders[i],TBM_GETPOS,0,0))return false;return true;}
 static bool makeRamp(WORD (&out)[3][256]) {
  if(selected<0||!monitors[selected].haveOriginal)return false;
- int v[7];if(!decode(encode(),v))return false;
+ int v[CONTROL_COUNT];if(!decode(encode(),v))return false;
  for(int c=0;c<3;c++)for(int i=0;i<256;i++){
   double x=i/255.0; x=(x-0.5)*(v[1]/100.0)+0.5; x=std::clamp(x,0.0,1.0); x=pow(x,100.0/v[0])+v[2]/100.0; x=std::clamp(x,0.0,1.0);
-  x=pow(x,100.0/v[3]);x=std::clamp(x*(v[4+c]/100.0),0.0,1.0);
+  x=pow(x,100.0/v[3]);x=std::clamp(x*(v[4+c]/100.0)*temperatureGain(v[7],c),0.0,1.0);
   double pos=x*255;int low=(int)pos,high=std::min(255,low+1);double fraction=pos-low;
   out[c][i]=(WORD)std::lround(monitors[selected].original[c][low]*(1-fraction)+monitors[selected].original[c][high]*fraction);
  }
  return true;
 }
 static bool applyCurrent(){WORD ramp[3][256];return selected>=0&&sameMonitor(monitors[selected])&&makeRamp(ramp)&&setRamp(monitors[selected].device,ramp);}
-static void loadProfile(){if(selected<0)return;std::wstring p=profileName();int v[7]; if(p==L"Padrão"||!decode(readIni(section(),p),v))std::copy(defaults,defaults+7,v);setValues(v);status(L"Ajustes ao vivo. Segure Comparar para ver a imagem anterior.");}
+static void loadProfile(){if(selected<0)return;std::wstring p=profileName();int v[CONTROL_COUNT]; if(p==L"Padrão"||!decode(readIni(section(),p),v))std::copy(defaults,defaults+CONTROL_COUNT,v);setValues(v);status(L"Ajustes ao vivo. Segure Comparar para ver a imagem anterior.");}
 static void fillProfiles(){SendMessageW(profileBox,CB_RESETCONTENT,0,0);SendMessageW(profileBox,CB_ADDSTRING,0,(LPARAM)L"Padrão");wchar_t buf[32768]{};GetPrivateProfileSectionW(section().c_str(),buf,32768,iniPath.c_str());for(wchar_t *p=buf;*p;p+=wcslen(p)+1){wchar_t *eq=wcschr(p,L'=');if(eq){std::wstring key(p,eq-p);if(!key.empty()&&key!=L"Padrão")SendMessageW(profileBox,CB_ADDSTRING,0,(LPARAM)key.c_str());}}
  std::wstring active=readIni(L"Active",monitors[selected].key,L"Padrão");LRESULT ix=SendMessageW(profileBox,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)active.c_str());SendMessageW(profileBox,CB_SETCURSEL,ix==CB_ERR?0:ix,0);loadProfile();}
 static void selectMonitor(){resetComparison();selected=(int)SendMessageW(monitorBox,CB_GETCURSEL,0,0);if(selected<0||selected>=(int)monitors.size()){selected=-1;status(L"Nenhum monitor encontrado.");return;}if(monitors[selected].key.empty()){SendMessageW(profileBox,CB_RESETCONTENT,0,0);setValues(defaults);status(L"Identificação indisponível; ajustes e perfis bloqueados nesta tela.");return;}fillProfiles();}
@@ -115,13 +117,13 @@ static void enumerate(bool preserve=true){std::wstring old=selected>=0&&selected
 static bool validProfile(const std::wstring &p){return !p.empty()&&p.size()<60&&p!=L"Padrão"&&p.find_first_of(L"[]=\r\n") == std::wstring::npos&&p.front()!=L' '&&p.back()!=L' ';}
 static bool startupEnabled(){HKEY k;wchar_t value[1024]{};DWORD n=sizeof(value),type=0;if(RegOpenKeyExW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",0,KEY_QUERY_VALUE,&k)!=ERROR_SUCCESS)return false;LONG r=RegQueryValueExW(k,L"SerjoColors",nullptr,&type,(BYTE*)value,&n);RegCloseKey(k);return r==ERROR_SUCCESS;}
 static bool setStartup(bool enable){HKEY k;if(RegCreateKeyExW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",0,nullptr,0,KEY_SET_VALUE,nullptr,&k,nullptr)!=ERROR_SUCCESS)return false;LONG r;if(enable){wchar_t path[MAX_PATH];GetModuleFileNameW(nullptr,path,MAX_PATH);std::wstring cmd=L"\""+std::wstring(path)+L"\" --startup";r=RegSetValueExW(k,L"SerjoColors",0,REG_SZ,(BYTE*)cmd.c_str(),(DWORD)((cmd.size()+1)*sizeof(wchar_t)));}else{r=RegDeleteValueW(k,L"SerjoColors");if(r==ERROR_FILE_NOT_FOUND)r=ERROR_SUCCESS;}RegCloseKey(k);return r==ERROR_SUCCESS;}
-static void applySaved(){int old=selected;for(size_t i=0;i<monitors.size();i++){selected=(int)i;if(monitors[i].key.empty())continue;std::wstring p=readIni(L"Active",monitors[i].key,L"Padrão");int v[7];if(p!=L"Padrão"&&decode(readIni(section(),p),v)){setValues(v);applyCurrent();}}selected=old;if(selected>=0)fillProfiles();}
+static void applySaved(){int old=selected;for(size_t i=0;i<monitors.size();i++){selected=(int)i;if(monitors[i].key.empty())continue;std::wstring p=readIni(L"Active",monitors[i].key,L"Padrão");int v[CONTROL_COUNT];if(p!=L"Padrão"&&decode(readIni(section(),p),v)){setValues(v);applyCurrent();}}selected=old;if(selected>=0)fillProfiles();}
 static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp){switch(msg){
  case WM_CREATE:{mainWindow=h; font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");titleFont=CreateFontW(-27,0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI"); background=CreateSolidBrush(RGB(248,250,253)); HWND title=control(L"STATIC",L"SerjoColors  " SERJO_VERSION_TEXT,0,24,16,400,38);SendMessageW(title,WM_SETFONT,(WPARAM)titleFont,TRUE);
  control(L"STATIC",L"Monitor",0,24,66,110,23);monitorBox=control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,24,90,360,240,ID_MONITOR);control(L"BUTTON",L"Atualizar",WS_TABSTOP,396,89,105,30,ID_REFRESH);
  control(L"STATIC",L"Perfil",0,24,132,100,22);profileBox=control(WC_COMBOBOXW,L"",CBS_DROPDOWN|WS_VSCROLL|WS_TABSTOP,24,156,255,220,ID_PROFILE);SendMessageW(profileBox,CB_LIMITTEXT,59,0);control(L"BUTTON",L"Novo",WS_TABSTOP,288,155,72,30,ID_NEW);saveButton=control(L"BUTTON",L"Salvar",WS_TABSTOP,366,155,72,30,ID_SAVE);control(L"BUTTON",L"Excluir",WS_TABSTOP,444,155,72,30,ID_DELETE);
  control(L"STATIC",L"AJUSTES DE IMAGEM  ·  experimental / SDR",0,24,205,490,23);
- for(int i=0;i<7;i++){int y=230+i*32;control(L"STATIC",labels[i],0,24,y,195,24);sliders[i]=control(TRACKBAR_CLASSW,L"",TBS_HORZ|TBS_NOTICKS|WS_TABSTOP,217,y-3,244,32,ID_SLIDER+i);SendMessageW(sliders[i],TBM_SETRANGE,TRUE,MAKELPARAM(i==2?0:50,i==2?30:150));values[i]=control(L"STATIC",L"",SS_RIGHT,466,y,48,24);}
+ for(int i=0;i<CONTROL_COUNT;i++){int y=228+i*28;control(L"STATIC",labels[i],0,24,y,195,24);sliders[i]=control(TRACKBAR_CLASSW,L"",TBS_HORZ|TBS_NOTICKS|WS_TABSTOP,217,y-3,244,32,ID_SLIDER+i);SendMessageW(sliders[i],TBM_SETRANGE,TRUE,MAKELPARAM(i==2||i==7?0:50,i==2?30:(i==7?100:150)));values[i]=control(L"STATIC",L"",SS_RIGHT,466,y,48,24);}
  control(L"STATIC",L"Saturação e nitidez: indisponíveis",0,24,459,480,22);
  applyButton=control(L"BUTTON",L"Segure para comparar",WS_TABSTOP,24,487,210,34,ID_PREVIEW);SetWindowSubclass(applyButton,compareProc,1,0);control(L"BUTTON",L"Restaurar",WS_TABSTOP,244,487,110,34,ID_REVERT);control(L"BUTTON",L"Aplicar",WS_TABSTOP,364,487,145,34,ID_APPLY);
  startupCheck=control(L"BUTTON",L"Iniciar com o Windows e aplicar perfis",BS_AUTOCHECKBOX|WS_TABSTOP,24,531,440,26,ID_STARTUP);SendMessageW(startupCheck,BM_SETCHECK,startupEnabled()?BST_CHECKED:BST_UNCHECKED,0);
@@ -129,10 +131,10 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp){switch(msg)
  case WM_CTLCOLORSTATIC: case WM_CTLCOLORBTN:SetBkColor((HDC)wp,RGB(248,250,253));SetTextColor((HDC)wp,RGB(34,44,60));return (LRESULT)background;
  case WM_HSCROLL:if(!updating){updateValues();if(!comparing&&ensureComparison()&&!liveTimer){liveTimer=SetTimer(h,3,120,nullptr)!=0;}}return 0;
  case WM_COMMAND:{int id=LOWORD(wp),code=HIWORD(wp);if(id==ID_MONITOR&&code==CBN_SELCHANGE)selectMonitor();else if(id==ID_PROFILE&&code==CBN_SELCHANGE){bool ready=ensureComparison();loadProfile();if(ready&&!applyCurrent())status(L"Não foi possível mostrar o perfil nesta tela.");}else if(id==ID_REFRESH)enumerate();else if(id==ID_UPDATE&&!checkingUpdate){checkingUpdate=true;status(L"Consultando atualizações no GitHub...");HANDLE thread=CreateThread(nullptr,0,checkUpdateThread,h,0,nullptr);if(thread)CloseHandle(thread);else{checkingUpdate=false;status(L"Não foi possível iniciar a verificação.");}}else if(id==ID_STARTUP){bool on=SendMessageW(startupCheck,BM_GETCHECK,0,0)==BST_CHECKED;if(!setStartup(on)){SendMessageW(startupCheck,BM_SETCHECK,on?BST_UNCHECKED:BST_CHECKED,0);status(L"Não foi possível alterar a inicialização automática.");}else status(on?L"Inicialização automática ativada para este usuário.":L"Inicialização automática desativada.");}
- else if(id==ID_NEW){resetComparison();SetWindowTextW(profileBox,L"");SetFocus(profileBox);setValues(defaults);status(L"Digite um nome no campo Perfil, ajuste e clique em Salvar.");}
+ else if(id==ID_NEW){resetComparison();bool ready=ensureComparison();SetWindowTextW(profileBox,L"");SetFocus(profileBox);setValues(defaults);if(ready&&!applyCurrent())status(L"Não foi possível mostrar os ajustes iniciais nesta tela.");else status(L"Digite um nome no campo Perfil, ajuste e clique em Salvar.");}
  else if(id==ID_SAVE&&selected>=0&&!monitors[selected].key.empty()){std::wstring p=profileName();if(!validProfile(p)){status(L"Digite um nome válido para o perfil (diferente de Padrão).");break;}if(!writeIni(section(),p,encode())){status(L"Não foi possível salvar o perfil; seus ajustes continuam na tela.");break;}fillProfiles();LRESULT found=SendMessageW(profileBox,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)p.c_str());if(found!=CB_ERR)SendMessageW(profileBox,CB_SETCURSEL,found,0);loadProfile();status(L"Perfil salvo. Clique em Aplicar para usar na inicialização.");}
  else if(id==ID_DELETE&&selected>=0&&!monitors[selected].key.empty()){std::wstring p=profileName();if(validProfile(p)&&MessageBoxW(h,L"Excluir este perfil?",L"SerjoColors",MB_YESNO|MB_ICONQUESTION)==IDYES){if(readIni(L"Active",monitors[selected].key,L"Padrão")==p){status(L"Restaure o padrão antes de excluir o perfil ativo.");break;}if(!WritePrivateProfileStringW(section().c_str(),p.c_str(),nullptr,iniPath.c_str())){status(L"Não foi possível excluir o perfil.");break;}fillProfiles();}}
- else if(id==ID_APPLY&&selected>=0&&!monitors[selected].key.empty()){resetComparison();std::wstring p=profileName();if(p!=L"Padrão"&&!validProfile(p)){status(L"Selecione ou salve um perfil primeiro.");break;}if(p==L"Padrão"){if(monitors[selected].haveOriginal&&sameMonitor(monitors[selected])&&setRamp(monitors[selected].device,monitors[selected].original)){if(writeIni(L"Active",monitors[selected].key,L"Padrão"))status(L"Padrão solicitado. Verifique o resultado na tela.");else status(L"Imagem alterada, mas perfil ativo não foi salvo. Desative o início automático.");}else status(L"Não foi possível restaurar esta tela.");}else if(readIni(section(),p)!=encode()){status(L"Salve as alterações no perfil antes de aplicar.");}else if(applyCurrent()){if(writeIni(L"Active",monitors[selected].key,p))status(L"Perfil aplicado. Confira o resultado na tela.");else status(L"Imagem alterada, mas perfil ativo não foi salvo. Desative o início automático.");}else status(L"O driver recusou este ajuste.");}
+ else if(id==ID_APPLY&&selected>=0&&!monitors[selected].key.empty()){resetComparison();std::wstring p=profileName();if(p!=L"Padrão"&&!validProfile(p)){status(L"Selecione ou salve um perfil primeiro.");break;}if(p==L"Padrão"){if(monitors[selected].haveOriginal&&sameMonitor(monitors[selected])&&setRamp(monitors[selected].device,monitors[selected].original)){if(writeIni(L"Active",monitors[selected].key,L"Padrão"))status(L"Padrão solicitado. Verifique o resultado na tela.");else status(L"Imagem alterada, mas perfil ativo não foi salvo. Desative o início automático.");}else status(L"Não foi possível restaurar esta tela.");}else if(!savedValuesMatch(p)){status(L"Salve as alterações no perfil antes de aplicar.");}else if(applyCurrent()){if(writeIni(L"Active",monitors[selected].key,p))status(L"Perfil aplicado. Confira o resultado na tela.");else status(L"Imagem alterada, mas perfil ativo não foi salvo. Desative o início automático.");}else status(L"O driver recusou este ajuste.");}
  else if(id==ID_REVERT&&selected>=0&&!monitors[selected].key.empty()){resetComparison();if(monitors[selected].haveOriginal&&sameMonitor(monitors[selected])&&setRamp(monitors[selected].device,monitors[selected].original)){setValues(defaults);SendMessageW(profileBox,CB_SETCURSEL,0,0);if(writeIni(L"Active",monitors[selected].key,L"Padrão"))status(L"Referência inicial restaurada (verifique na tela).");else status(L"Imagem alterada, mas perfil ativo não foi salvo. Desative o início automático.");}else status(L"Não foi possível restaurar a configuração desta tela.");}
  return 0;}
  case WM_TIMER:if(wp==3){KillTimer(h,3);liveTimer=false;if(!comparing&&!applyCurrent())status(L"O driver não aplicou o ajuste. Verifique SDR e o suporte da tela.");}else if(wp==2){KillTimer(h,2);enumerate();if(startupEnabled())applySaved();}return 0;
