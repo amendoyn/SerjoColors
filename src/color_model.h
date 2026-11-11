@@ -38,3 +38,9 @@ inline double temperatureGain(int temperature, int channel) {
  if(channel==1) return 1.0-0.04*(t<0?-t:t);
  return 1.0;
 }
+
+// Windows GDI documents a maximum distance of 32768 from the identity ramp.
+inline bool withinGdiRange(unsigned index, unsigned value) {
+ const int delta=static_cast<int>(value)-static_cast<int>(index*257u);
+ return delta >= -32768 && delta <= 32768;
+}

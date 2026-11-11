@@ -132,3 +132,25 @@ O usuário informou que, durante a calibração, a imagem pisca entre o estado a
 O código foi compilado no Mac e os testes do modelo de cor foram executados localmente. O sintoma, a resposta durante o arrasto, comparação, reconexão, suspensão, troca entre monitores e atualização automática **precisam de teste no Windows**. Sem observação do driver, não é possível garantir que o piscar foi eliminado: o ajuste por gamma continua sujeito às limitações da API de Windows, ao driver e a outros calibradores.
 
 Teste sugerido: atualizar para 1.4; selecionar cada tela; mover brilho, gama e temperatura lentamente; confirmar se há piscadas antes e depois de soltar; segurar e soltar Comparar; alterar, trocar de monitor e voltar; registrar em qual tela e controle persiste o comportamento. Se continuar, informar se ocorre também após parar o controle e se há outros softwares de calibração ativos.
+
+---
+
+## Continuação — versão 1.5, 11/11/2026
+
+### Relato e causa encontrada
+
+O usuário relatou que, ao configurar, aplicar e fechar, a tela retornava à aparência anterior. A versão e o perfil selecionado ainda não foram confirmados. Na revisão estática foi encontrado um erro reproduzível por leitura do código: ao alterar controles enquanto o perfil selecionado era **Padrão**, o botão **Aplicar** enviava a referência anterior em vez dos ajustes escolhidos. Isso é um defeito confirmado no fluxo, mas não prova que seja a única causa no equipamento do usuário.
+
+### Mudanças
+
+- **Aplicar** solicita os ajustes atuais ao Windows. Ao partir de Padrão ou campo vazio, cria um perfil com nome disponível como “Meu ajuste”, sem substituir outro perfil com esse nome. Ao editar um perfil nomeado, solicita e salva os valores atuais nesse perfil. **Restaurar** continua sendo a ação que pede a referência anterior.
+- Abrir o aplicativo manualmente também tenta reaplicar os perfis ativos; a opção de início automático decide se o aplicativo é iniciado ao entrar no Windows.
+- Antes de salvar ou aplicar, verifica o limite de desvio da rampa documentado para o mecanismo GDI, informando quando combinações extremas não forem aceitas. A ação Aplicar não sobrescreve um perfil existente se a validação ou solicitação falhar.
+- O aplicativo compara uma amostra da rampa lida depois de aplicar e informa se o Windows não confirmou; uma leitura compatível **não comprova que o driver manteve a alteração ou que a aparência visual está correta**. A aplicação ao abrir sinaliza falhas detectáveis.
+- Ao fechar a janela, tenta enviar o último ajuste pendente antes de ocultá-la.
+
+### Evidências e limites
+
+Foram executados testes locais do modelo de cor e limites GDI; a compilação cruzada foi realizada com avisos tratados como erro. Houve revisão estática independente do fluxo, que identificou o erro em Padrão e riscos de persistência e confirmação. Nenhum teste funcional desta versão ocorreu no Windows ou no monitor BOE0697; outros aplicativos, gerenciamento de cor e o driver podem sobrescrever a rampa, ou a API pode retornar sucesso sem mudança física. A correção do relato depende do teste do usuário.
+
+Teste: atualizar para 1.5; selecionar a tela do notebook, manter Padrão, mudar um ajuste moderado, clicar Aplicar e conferir a tela e o perfil criado. Fechar a janela e reabrir; então sair pela bandeja, abrir de novo e conferir novamente. Testar também inicialização automática após entrar no Windows. Anotar a mensagem mostrada na parte inferior caso não funcione.

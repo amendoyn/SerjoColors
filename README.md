@@ -18,3 +18,5 @@ A partir da versão 1.2, o aplicativo inclui **Verificar atualização**. A vers
 O manifest e o binário são obtidos via HTTPS de caminhos fixos no repositório. O checksum identifica inconsistências e corrupção; não é uma assinatura digital. O executável não é assinado. A atualização requer permissão de escrita na pasta onde ele está instalado.
 
 A versão 1.4 preserva ajustes em andamento ao tratar mudanças de vídeo e reduz escritas repetidas. A correção do relato de piscadas ainda depende de teste no computador Windows.
+
+A versão 1.5 corrige o botão Aplicar quando a edição parte de Padrão e verifica limites de ajustes GDI. O funcionamento real em cada monitor depende de teste no Windows.

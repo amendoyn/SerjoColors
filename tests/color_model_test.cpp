@@ -14,4 +14,8 @@ int main(){
  assert(temperatureGain(0,2)==1.0);
  assert(temperatureGain(100,2)<temperatureGain(50,2));
  assert(temperatureGain(100,0)==1.0);
+ assert(withinGdiRange(255,32767));
+ assert(!withinGdiRange(255,22937));
+ assert(withinGdiRange(0,32768));
+ assert(!withinGdiRange(0,32769));
 }
